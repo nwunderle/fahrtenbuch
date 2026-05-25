@@ -432,6 +432,59 @@
     font-weight: 700;
     margin-bottom: 14px;
   }
+
+  /* ── TRIP TYPE TOGGLE ── */
+  .type-toggle {
+    display: flex;
+    gap: 8px;
+  }
+  .type-toggle label {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    padding: 12px;
+    background: var(--surface);
+    border: 2px solid var(--border);
+    border-radius: 10px;
+    font-size: 14px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.2s;
+  }
+  .type-toggle input { display: none; }
+  .type-toggle input:checked + label.type-business {
+    border-color: var(--accent);
+    background: var(--accent-glow);
+    color: var(--accent);
+  }
+  .type-toggle input:checked + label.type-private {
+    border-color: var(--amber);
+    background: rgba(245,158,11,0.1);
+    color: var(--amber);
+  }
+
+  .trip-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    font-size: 11px;
+    font-weight: 600;
+    padding: 3px 8px;
+    border-radius: 6px;
+    font-family: 'DM Mono', monospace;
+    letter-spacing: 0.3px;
+    text-transform: uppercase;
+  }
+  .trip-badge.business {
+    background: var(--accent-glow);
+    color: var(--accent);
+  }
+  .trip-badge.private {
+    background: rgba(245,158,11,0.1);
+    color: var(--amber);
+  }
 </style>
 </head>
 <body>
@@ -509,6 +562,16 @@
       <select id="fVehicle">
         <option value="">Fahrzeug wählen…</option>
       </select>
+    </div>
+  </div>
+
+  <div class="form-section">
+    <div class="form-section-title">Art der Fahrt</div>
+    <div class="type-toggle">
+      <input type="radio" name="tripType" id="typeBusiness" value="business" checked>
+      <label for="typeBusiness" class="type-business">💼 Beruflich</label>
+      <input type="radio" name="tripType" id="typePrivate" value="private">
+      <label for="typePrivate" class="type-private">🏠 Privat</label>
     </div>
   </div>
 
@@ -607,19 +670,22 @@ function renderMonthLabel() {
 function renderStats() {
   const trips = getFilteredTrips();
   const totalKm = trips.reduce((s, t) => s + (t.kmEnd - t.kmStart), 0);
-  const count = trips.length;
+  const bizTrips = trips.filter(t => t.tripType !== 'private');
+  const privTrips = trips.filter(t => t.tripType === 'private');
+  const bizKm = bizTrips.reduce((s, t) => s + (t.kmEnd - t.kmStart), 0);
+  const privKm = privTrips.reduce((s, t) => s + (t.kmEnd - t.kmStart), 0);
   document.getElementById('stats').innerHTML = `
-    <div class="stat-card">
-      <div class="label">Fahrten</div>
-      <div class="value">${count}</div>
-    </div>
     <div class="stat-card">
       <div class="label">Gesamt</div>
       <div class="value">${totalKm.toLocaleString('de-DE')} <span class="unit">km</span></div>
     </div>
     <div class="stat-card">
-      <div class="label">⌀ / Fahrt</div>
-      <div class="value">${count ? Math.round(totalKm / count).toLocaleString('de-DE') : 0} <span class="unit">km</span></div>
+      <div class="label">💼 Beruflich</div>
+      <div class="value" style="color:var(--accent)">${bizKm.toLocaleString('de-DE')} <span class="unit">km</span></div>
+    </div>
+    <div class="stat-card">
+      <div class="label">🏠 Privat</div>
+      <div class="value" style="color:var(--amber)">${privKm.toLocaleString('de-DE')} <span class="unit">km</span></div>
     </div>
   `;
 }
@@ -647,10 +713,16 @@ function renderTrips() {
     const timeStr = t.time || '';
     const vehicles = getVehicles();
     const v = vehicles.find(v => v.id === t.vehicleId);
+    const isBusiness = t.tripType !== 'private';
+    const badgeClass = isBusiness ? 'business' : 'private';
+    const badgeLabel = isBusiness ? '💼 Beruflich' : '🏠 Privat';
     return `<div class="trip-card" onclick="toggleTripActions('${t.id}')">
       <div class="trip-top">
         <div class="trip-date">${dateStr}${timeStr ? ' · ' + timeStr : ''}</div>
-        <div class="trip-km">${dist.toLocaleString('de-DE')} km</div>
+        <div style="display:flex;gap:6px;align-items:center">
+          <span class="trip-badge ${badgeClass}">${badgeLabel}</span>
+          <div class="trip-km">${dist.toLocaleString('de-DE')} km</div>
+        </div>
       </div>
       <div class="trip-route">
         <div class="route-dots"><div class="dot"></div><div class="line"></div><div class="dot end"></div></div>
@@ -708,6 +780,7 @@ function saveTrip() {
   const kmStart = parseFloat(document.getElementById('fKmStart').value);
   const kmEnd = parseFloat(document.getElementById('fKmEnd').value);
   const vehicleId = document.getElementById('fVehicle').value;
+  const tripType = document.querySelector('input[name="tripType"]:checked').value;
 
   if (!date || !from || !to || isNaN(kmStart) || isNaN(kmEnd)) {
     showToast('Bitte alle Pflichtfelder ausfüllen.', true);
@@ -723,12 +796,12 @@ function saveTrip() {
   if (editingId) {
     const idx = trips.findIndex(t => t.id === editingId);
     if (idx !== -1) {
-      trips[idx] = { ...trips[idx], date, time, from, to, kmStart, kmEnd, vehicleId };
+      trips[idx] = { ...trips[idx], date, time, from, to, kmStart, kmEnd, vehicleId, tripType };
     }
     saveTrips(trips);
     showToast('Fahrt aktualisiert ✓');
   } else {
-    trips.push({ id: uid(), date, time, from, to, kmStart, kmEnd, vehicleId });
+    trips.push({ id: uid(), date, time, from, to, kmStart, kmEnd, vehicleId, tripType });
     saveTrips(trips);
     showToast('Fahrt gespeichert ✓');
   }
@@ -751,6 +824,7 @@ function editTrip(id) {
   document.getElementById('fKmStart').value = trip.kmStart;
   document.getElementById('fKmEnd').value = trip.kmEnd;
   document.getElementById('fVehicle').value = trip.vehicleId || '';
+  document.getElementById(trip.tripType === 'private' ? 'typePrivate' : 'typeBusiness').checked = true;
   calcKm();
 
   updateFormUI();
@@ -772,6 +846,7 @@ function resetForm() {
   document.getElementById('fKmStart').value = '';
   document.getElementById('fKmEnd').value = '';
   document.getElementById('fVehicle').value = '';
+  document.getElementById('typeBusiness').checked = true;
   document.getElementById('kmCalc').textContent = '—';
   document.getElementById('routeEstimate').style.display = 'none';
   estimatedDistance = null;
@@ -827,13 +902,14 @@ function exportCSV() {
   if (!trips.length) { showToast('Keine Fahrten zum Exportieren.', true); return; }
 
   const vehicles = getVehicles();
-  const header = 'Datum;Uhrzeit;Von;Nach;KM Start;KM Ende;Distanz;Fahrzeug;Kennzeichen';
+  const header = 'Datum;Uhrzeit;Von;Nach;KM Start;KM Ende;Distanz;Art;Fahrzeug;Kennzeichen';
   const rows = trips.map(t => {
     const v = vehicles.find(v => v.id === t.vehicleId);
     return [
       t.date, t.time || '',
       `"${t.from}"`, `"${t.to}"`,
       t.kmStart, t.kmEnd, t.kmEnd - t.kmStart,
+      t.tripType === 'private' ? 'Privat' : 'Beruflich',
       v ? `"${v.name}"` : '', v ? `"${v.plate}"` : ''
     ].join(';');
   });
